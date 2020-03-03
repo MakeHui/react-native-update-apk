@@ -1,6 +1,7 @@
 "use strict";
 
 import { NativeModules, Platform } from "react-native";
+import RNFetchBlob from 'rn-fetch-blob'
 
 const RNUpdateAPK = NativeModules.RNUpdateAPK;
 
@@ -68,34 +69,28 @@ export class UpdateAPK {
   };
 
   downloadApk = remote => {
-    const RNFS = require("react-native-fs");
-    const progress = data => {
-      const percentage = ((100 * data.bytesWritten) / data.contentLength) | 0;
-      this.options.downloadApkProgress &&
-        this.options.downloadApkProgress(percentage, data.contentLength, data.bytesWritten);
-    };
-    const begin = res => {
-      console.log("RNUpdateAPK::downloadApk - downloadApkStart");
-      this.options.downloadApkStart && this.options.downloadApkStart();
-    };
-    const progressDivider = 1;
-    // You must be sure filepaths.xml exposes this path or you will have a FileProvider error API24+
-    // You might check {totalSpace, freeSpace} = await RNFS.getFSInfo() to make sure there is room
-    const downloadDestPath = `${RNFS.CachesDirectoryPath}/NewApp.apk`;
+    const RNFS = RNFetchBlob.fs;
+    const downloadDestPath = `${RNFS.dirs.CacheDir}/NewApp.apk`;
 
-    const ret = RNFS.downloadFile({
-      fromUrl: remote.apkUrl,
-      toFile: downloadDestPath,
-      begin,
-      progress,
-      background: true,
-      progressDivider
-    });
+    jobId = 0;
+    
+    console.log("RNUpdateAPK::downloadApk - downloadApkStart");
+    this.options.downloadApkStart && this.options.downloadApkStart();
 
-    jobId = ret.jobId;
-
-    ret.promise
-      .then(res => {
+    RNFetchBlob
+      .config({
+        fileCache : true,
+        path: downloadDestPath,
+      })
+      .fetch('GET', remote.apkUrl)
+      .progress({ count : 10 }, (received, total) => {
+        console.log('progress', received / total);
+        this.options.downloadApkProgress && this.options.downloadApkProgress(received, total);
+      })
+      .then((res) => {
+        // the temp file path
+        console.log('The file saved to ', res.path())
+        const downloadDestPath = res.path();
         console.log("RNUpdateAPK::downloadApk - downloadApkEnd");
         this.options.downloadApkEnd && this.options.downloadApkEnd();
         RNUpdateAPK.getApkInfo(downloadDestPath)
